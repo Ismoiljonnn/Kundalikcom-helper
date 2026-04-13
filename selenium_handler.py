@@ -12,8 +12,8 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 logger = logging.getLogger(__name__)
 
-LOGIN_URL    = "https://kundalik.com/login"
-SITE_URL     = "https://kundalik.com"
+LOGIN_URL    = "https://login.emaktab.uz/"
+SITE_URL     = "https://emaktab.uz"
 WAIT_TIMEOUT = 20
 ACTIVE_WAIT  = 2
 
@@ -83,66 +83,27 @@ def _login_and_wait(driver: webdriver.Chrome, login: str, password: str) -> bool
         driver.get(LOGIN_URL)
         wait = WebDriverWait(driver, WAIT_TIMEOUT)
 
-        # Login field — turli selectorlarni sinab ko'ramiz
-        login_field = None
-        for selector in [
-            (By.NAME, "username"),
-            (By.NAME, "login"),
-            (By.ID, "username"),
-            (By.CSS_SELECTOR, "input[type='text']"),
-            (By.CSS_SELECTOR, "input[placeholder*='ogin']"),
-            (By.CSS_SELECTOR, "input[placeholder*='ser']"),
-        ]:
-            try:
-                login_field = wait.until(EC.presence_of_element_located(selector))
-                break
-            except TimeoutException:
-                continue
-
-        if not login_field:
-            logger.error(f"Login field topilmadi: {login}")
-            return False
-
+        # Login field — name="login"
+        login_field = wait.until(EC.presence_of_element_located((By.NAME, "login")))
         login_field.clear()
         login_field.send_keys(login)
 
-        # Password field
-        pwd_field = None
-        for selector in [
-            (By.NAME, "password"),
-            (By.ID, "password"),
-            (By.CSS_SELECTOR, "input[type='password']"),
-        ]:
-            try:
-                pwd_field = driver.find_element(*selector)
-                break
-            except NoSuchElementException:
-                continue
+        # Captcha tekshiruvi — ko'p urinishdan keyin chiqadi
+        try:
+            exceeded = driver.find_element(By.NAME, "exceededAttempts")
+            if exceeded.get_attribute("value") == "true":
+                logger.warning(f"Captcha chiqdi, bu login o'tkazib yuborildi: {login}")
+                return False
+        except NoSuchElementException:
+            pass
 
-        if not pwd_field:
-            logger.error(f"Password field topilmadi: {login}")
-            return False
-
+        # Password field — name="password"
+        pwd_field = driver.find_element(By.NAME, "password")
         pwd_field.clear()
         pwd_field.send_keys(password)
 
-        # Submit tugmasi
-        submit = None
-        for selector in [
-            (By.CSS_SELECTOR, "button[type='submit']"),
-            (By.CSS_SELECTOR, "input[type='submit']"),
-            (By.XPATH, "//button[contains(text(),'Kirish') or contains(text(),'Login') or contains(text(),'Войти')]"),
-        ]:
-            try:
-                submit = driver.find_element(*selector)
-                break
-            except NoSuchElementException:
-                continue
-
-        if not submit:
-            logger.error(f"Submit tugmasi topilmadi: {login}")
-            return False
-
+        # Submit — input[name="submit"]
+        submit = driver.find_element(By.NAME, "submit")
         submit.click()
 
         # URL o'zgarishini kutamiz
