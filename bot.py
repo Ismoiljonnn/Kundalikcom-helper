@@ -275,14 +275,15 @@ async def add_parent_pass(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ud.pop(k, None)
 
     if ok:
-        await update.message.reply_text(
-            f"✅ *{ud.get('ns_fio','O\'quvchi')}* qo'shildi!",
-            parse_mode="Markdown", reply_markup=main_kb()
-        )
+            student_name = ud.get("ns_fio", "O'quvchi")
+            await update.message.reply_text(
+                f"✅ *{student_name}* qo'shildi!",
+                parse_mode="Markdown", reply_markup=main_kb()
+            )
     else:
-        await update.message.reply_text(
-            "⚠️ Bu login allaqachon mavjud.", reply_markup=main_kb()
-        )
+            await update.message.reply_text(
+                "⚠️ Bu login allaqachon mavjud.", reply_markup=main_kb()
+            )
     return ConversationHandler.END
 
 
