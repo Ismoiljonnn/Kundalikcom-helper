@@ -129,15 +129,38 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             )
             return ConversationHandler.END
 
+    # Admin bo'lsa — login so'ramasdan to'g'ridan-to'g'ri kiradi
+    if user_id in ADMIN_IDS:
+        teachers = db.get_all_teachers()
+        if not teachers:
+            await update.message.reply_text(
+                "🛠 Birinchi o'qituvchi qo'shish uchun /addteacher buyrug'ini yuboring.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            return ConversationHandler.END
+        # Adminga tegishli teacher akkaunt bormi?
+        admin_teacher = None
+        for login, t in teachers.items():
+            if login == str(user_id) or t.get("fio") == "Admin":
+                admin_teacher = (login, t)
+                break
+        # Birinchi o'qituvchini admin sifatida ishlat
+        if not admin_teacher:
+            first_login, first_teacher = next(iter(teachers.items()))
+            admin_teacher = (first_login, first_teacher)
+        login, teacher = admin_teacher
+        db.link_telegram(user_id, login)
+        ctx.user_data["teacher_login"] = login
+        await update.message.reply_text(
+            f"👋 Xush kelibsiz, *{teacher['fio']}* (Admin)!",
+            parse_mode="Markdown",
+            reply_markup=main_kb()
+        )
+        return ConversationHandler.END
+
     teachers = db.get_all_teachers()
     if not teachers:
-        if ADMIN_IDS and user_id not in ADMIN_IDS:
-            await update.message.reply_text("⛔ Hali hech qanday o'qituvchi yo'q. Admin kutilmoqda.")
-            return ConversationHandler.END
-        await update.message.reply_text(
-            "🛠 Birinchi o'qituvchi qo'shish uchun /addteacher buyrug'ini yuboring.\n"
-            "(Bu faqat admin uchun)"
-        )
+        await update.message.reply_text("⛔ Hali hech qanday o'qituvchi yo'q. Admin kutilmoqda.")
         return ConversationHandler.END
 
     await update.message.reply_text(
@@ -375,6 +398,7 @@ async def settings_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(buttons)
     )
     return EDIT_SELECT if action == "edit" else DEL_SELECT
+
 
 
 # ── Change password ────────────────────────────────────────────────────────────
