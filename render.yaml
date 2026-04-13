@@ -1,16 +1,24 @@
 services:
-  - type: worker          # Polling bot = background worker (HTTP server shart emas)
+  - type: web              # ← Web Service (webhook uchun HTTP port kerak)
     name: kundalik-bot
-    runtime: docker       # Dockerfile ishlatamiz (Chrome uchun)
+    runtime: docker
     dockerfilePath: ./Dockerfile
+
+    # Render bepul plandan foydalanayotgan bo'lsangiz disk yo'q,
+    # lekin standard/pro planlarda persistent disk ishlaydi:
     disk:
       name: bot-data
-      mountPath: /app/data  # students.json shu yerda saqlanadi (persistent disk)
+      mountPath: /app/data
       sizeGB: 1
+
     envVars:
       - key: BOT_TOKEN
-        sync: false       # Render dashboard dan qo'lda kiriting
-      - key: ALLOWED_USER_IDS
-        sync: false       # Ixtiyoriy: "123456,789012" formatida
+        sync: false                      # Dashboard dan kiriting
+
+      - key: ADMIN_IDS
+        sync: false                      # Telegram user IDlar, masalan: "123456789"
+
       - key: DB_PATH
-        value: /app/data/students.json
+        value: /app/data/db.json
+
+      # RENDER_EXTERNAL_HOSTNAME — Render avtomatik beradi (qo'lda kiritish shart emas)
