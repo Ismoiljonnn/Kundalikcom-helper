@@ -3,7 +3,7 @@ import hashlib
 from typing import Optional
 from pymongo import MongoClient
 
-MONGO_URI = os.environ.get("MONGO_URI", "mongodb+srv://Ismoiljon:27282728@cluster.hwngmtv.mongodb.net/?appName=Cluster")
+MONGO_URI = os.environ.get("MONGO_URI")
 DB_NAME   = "kundalik_bot"
 
 _client = None
