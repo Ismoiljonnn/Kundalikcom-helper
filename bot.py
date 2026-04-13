@@ -87,7 +87,7 @@ def settings_kb(is_admin: bool):
     rows = [
         [InlineKeyboardButton("✏️ O'quvchini tahrirlash", callback_data="edit")],
         [InlineKeyboardButton("🗑 O'quvchini o'chirish", callback_data="delete")],
-        [InlineKeyboardButton("🔑 Parolimni o'zgartirish", callback_data="change_pass")],
+        # [InlineKeyboardButton("🔑 Parolimni o'zgartirish", callback_data="change_pass")],
     ]
     if is_admin:
         rows.append([InlineKeyboardButton("👨‍💼 O'qituvchilarni boshqarish", callback_data="admin")])
