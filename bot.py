@@ -66,7 +66,12 @@ logger.info(f"Bot ishga tushmoqda | Webhook: {USE_WEBHOOK} | Host: {RENDER_HOST}
 
 # ── Keyboards ─────────────────────────────────────────────────────────────────
 
-def main_kb():
+def main_kb(admin: bool = False):
+    if admin:
+        return ReplyKeyboardMarkup([
+            ["➕ O'quvchi qo'shish", "📋 Sinf ro'yxati"],
+            ["⚡ HAMMANI ONLINE QILISH", "⚙️ Sozlamalar"],
+        ], resize_keyboard=True)
     return ReplyKeyboardMarkup([
         ["➕ O'quvchi qo'shish", "📋 Sinf ro'yxati"],
         ["⚡ HAMMANI ONLINE QILISH", "⚙️ Sozlamalar"],
@@ -104,6 +109,12 @@ async def require_auth(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> bool:
     """Returns True if authenticated, else sends auth prompt and returns False."""
     if get_teacher_login(ctx):
         return True
+    # Admin bo'lsa — avtomatik tizimga kirish
+    if update.effective_user.id in ADMIN_IDS:
+        linked = db.get_teacher_by_telegram(update.effective_user.id)
+        if linked:
+            ctx.user_data["teacher_login"] = linked
+            return True
     await update.message.reply_text(
         "🔐 Iltimos avval tizimga kiring.\n/start buyrug'ini yuboring.",
         reply_markup=ReplyKeyboardRemove()
@@ -122,14 +133,15 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         teacher = db.get_teacher(linked)
         if teacher:
             ctx.user_data["teacher_login"] = linked
+            _is_admin = update.effective_user.id in ADMIN_IDS
             await update.message.reply_text(
                 f"👋 Xush kelibsiz, *{teacher['fio']}*!",
                 parse_mode="Markdown",
-                reply_markup=main_kb()
+                reply_markup=main_kb(admin=_is_admin)
             )
             return ConversationHandler.END
 
-    # Admin bo'lsa — login so'ramasdan to'g'ridan-to'g'ri kiradi
+    # Admin bo'lsa — login so'ramasdan birinchi teacher sifatida kiradi
     if user_id in ADMIN_IDS:
         teachers = db.get_all_teachers()
         if not teachers:
@@ -138,23 +150,13 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 reply_markup=ReplyKeyboardRemove()
             )
             return ConversationHandler.END
-        # Adminga tegishli teacher akkaunt bormi?
-        admin_teacher = None
-        for login, t in teachers.items():
-            if login == str(user_id) or t.get("fio") == "Admin":
-                admin_teacher = (login, t)
-                break
-        # Birinchi o'qituvchini admin sifatida ishlat
-        if not admin_teacher:
-            first_login, first_teacher = next(iter(teachers.items()))
-            admin_teacher = (first_login, first_teacher)
-        login, teacher = admin_teacher
-        db.link_telegram(user_id, login)
-        ctx.user_data["teacher_login"] = login
+        first_login, first_teacher = next(iter(teachers.items()))
+        db.link_telegram(user_id, first_login)
+        ctx.user_data["teacher_login"] = first_login
         await update.message.reply_text(
-            f"👋 Xush kelibsiz, *{teacher['fio']}* (Admin)!",
+            f"👋 Xush kelibsiz, *{first_teacher['fio']}* (Admin)!",
             parse_mode="Markdown",
-            reply_markup=main_kb()
+            reply_markup=main_kb(admin=True)
         )
         return ConversationHandler.END
 
@@ -185,10 +187,11 @@ async def auth_pass(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         teacher = db.get_teacher(login)
         db.link_telegram(update.effective_user.id, login)
         ctx.user_data["teacher_login"] = login
+        _is_admin = update.effective_user.id in ADMIN_IDS
         await update.message.reply_text(
             f"✅ Xush kelibsiz, *{teacher['fio']}*!",
             parse_mode="Markdown",
-            reply_markup=main_kb()
+            reply_markup=main_kb(admin=_is_admin)
         )
         return ConversationHandler.END
     else:
@@ -223,7 +226,10 @@ async def menu_handler(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif text == "⚙️ Sozlamalar":
         await settings_menu(update, ctx)
     elif text == "🚪 Chiqish":
-        await logout(update, ctx)
+        if update.effective_user.id in ADMIN_IDS:
+            await update.message.reply_text("⛔ Admin tizimdan chiqolmaydi.")
+        else:
+            await logout(update, ctx)
 
 
 # ── Student list ───────────────────────────────────────────────────────────────
@@ -400,19 +406,11 @@ async def settings_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     return EDIT_SELECT if action == "edit" else DEL_SELECT
 
 
-
 # ── Change password ────────────────────────────────────────────────────────────
 
 async def change_pass_new(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    new_pass = update.message.text.strip()
-    if not new_pass:
-        await update.message.reply_text("⚠️ Parol bo'sh bo'lishi mumkin emas! Qayta kiriting:")
-        return CHANGE_PASS_NEW
-    if len(new_pass) < 4:
-        await update.message.reply_text("⚠️ Parol kamida 4 ta belgidan iborat bo'lishi kerak! Qayta kiriting:")
-        return CHANGE_PASS_NEW
     tlogin = get_teacher_login(ctx)
-    db.change_teacher_password(tlogin, new_pass)
+    db.change_teacher_password(tlogin, update.message.text.strip())
     await update.message.reply_text("✅ Parol o'zgartirildi!", reply_markup=main_kb())
     return ConversationHandler.END
 
