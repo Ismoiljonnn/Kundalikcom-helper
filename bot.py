@@ -129,38 +129,15 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             )
             return ConversationHandler.END
 
-    # Admin bo'lsa — login so'ramasdan to'g'ridan-to'g'ri kiradi
-    if user_id in ADMIN_IDS:
-        teachers = db.get_all_teachers()
-        if not teachers:
-            await update.message.reply_text(
-                "🛠 Birinchi o'qituvchi qo'shish uchun /addteacher buyrug'ini yuboring.",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            return ConversationHandler.END
-        # Adminga tegishli teacher akkaunt bormi?
-        admin_teacher = None
-        for login, t in teachers.items():
-            if login == str(user_id) or t.get("fio") == "Admin":
-                admin_teacher = (login, t)
-                break
-        # Birinchi o'qituvchini admin sifatida ishlat
-        if not admin_teacher:
-            first_login, first_teacher = next(iter(teachers.items()))
-            admin_teacher = (first_login, first_teacher)
-        login, teacher = admin_teacher
-        db.link_telegram(user_id, login)
-        ctx.user_data["teacher_login"] = login
-        await update.message.reply_text(
-            f"👋 Xush kelibsiz, *{teacher['fio']}* (Admin)!",
-            parse_mode="Markdown",
-            reply_markup=main_kb()
-        )
-        return ConversationHandler.END
-
     teachers = db.get_all_teachers()
     if not teachers:
-        await update.message.reply_text("⛔ Hali hech qanday o'qituvchi yo'q. Admin kutilmoqda.")
+        if ADMIN_IDS and user_id not in ADMIN_IDS:
+            await update.message.reply_text("⛔ Hali hech qanday o'qituvchi yo'q. Admin kutilmoqda.")
+            return ConversationHandler.END
+        await update.message.reply_text(
+            "🛠 Birinchi o'qituvchi qo'shish uchun /addteacher buyrug'ini yuboring.\n"
+            "(Bu faqat admin uchun)"
+        )
         return ConversationHandler.END
 
     await update.message.reply_text(
@@ -403,8 +380,15 @@ async def settings_cb(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # ── Change password ────────────────────────────────────────────────────────────
 
 async def change_pass_new(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    new_pass = update.message.text.strip()
+    if not new_pass:
+        await update.message.reply_text("⚠️ Parol bo'sh bo'lishi mumkin emas! Qayta kiriting:")
+        return CHANGE_PASS_NEW
+    if len(new_pass) < 4:
+        await update.message.reply_text("⚠️ Parol kamida 4 ta belgidan iborat bo'lishi kerak! Qayta kiriting:")
+        return CHANGE_PASS_NEW
     tlogin = get_teacher_login(ctx)
-    db.change_teacher_password(tlogin, update.message.text.strip())
+    db.change_teacher_password(tlogin, new_pass)
     await update.message.reply_text("✅ Parol o'zgartirildi!", reply_markup=main_kb())
     return ConversationHandler.END
 
