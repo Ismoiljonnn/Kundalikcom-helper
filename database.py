@@ -49,7 +49,8 @@ def verify_teacher(login: str, password: str) -> bool:
 
 
 def get_teacher(login: str) -> Optional[dict]:
-    return load_db()["teachers"].get(login)
+    db = load_db()
+    return db["teachers"].get(login)
 
 
 def get_all_teachers() -> dict:
@@ -61,7 +62,8 @@ def delete_teacher(login: str) -> bool:
     if login not in db["teachers"]:
         return False
     del db["teachers"][login]
-    db["telegram_links"] = {k: v for k, v in db["telegram_links"].items() if v != login}
+    db["telegram_links"] = {k: v for k,
+                            v in db["telegram_links"].items() if v != login}
     save_db(db)
     return True
 
@@ -123,7 +125,8 @@ def delete_student(teacher_login: str, student_login: str) -> bool:
     if not teacher:
         return False
     before = len(teacher["students"])
-    teacher["students"] = [s for s in teacher["students"] if s["login"] != student_login]
+    teacher["students"] = [s for s in teacher["students"]
+                           if s["login"] != student_login]
     if len(teacher["students"]) < before:
         save_db(db)
         return True
