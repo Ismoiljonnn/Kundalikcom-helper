@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 LOGIN_URL    = "https://login.emaktab.uz/"
 SITE_URL     = "https://emaktab.uz"
 WAIT_TIMEOUT = 20
-ACTIVE_WAIT  = 2
+ACTIVE_WAIT  = 3
 
 
 def _make_driver() -> webdriver.Chrome:
@@ -41,100 +41,100 @@ def _make_driver() -> webdriver.Chrome:
     return driver
 
 
-def _is_logged_in(driver: webdriver.Chrome) -> bool:
-    """Login muvaffaqiyatli bo'lganini tekshiradi."""
-    current_url = driver.current_url
-    # Hali login sahifasida bo'lsa — login xato
-    if "/login" in current_url:
-        return False
-    # Dashboard/home sahifasiga o'tgan bo'lsa — muvaffaqiyatli
-    return True
-
-
 def _do_logout(driver: webdriver.Chrome):
-    """Sessionni tozalash uchun logout qiladi."""
-    try:
-        # Birinchi usul: to'g'ridan URL orqali
-        driver.get(f"{SITE_URL}/logout")
-        time.sleep(1)
-        # Logout ishlagan bo'lsa login sahifasiga qaytadi
-        if "/login" in driver.current_url or driver.current_url == SITE_URL + "/":
-            return
-    except Exception:
-        pass
-
-    try:
-        driver.get(f"{SITE_URL}/auth/logout")
-        time.sleep(1)
-        return
-    except Exception:
-        pass
-
-    # Ikkinchi usul: cookie tozalash
     try:
         driver.delete_all_cookies()
         driver.execute_script("localStorage.clear(); sessionStorage.clear();")
-    except Exception:
-        pass
+        logger.info("Logout: cookie tozalandi")
+    except Exception as e:
+        logger.warning(f"Logout xato: {e}")
 
 
 def _login_and_wait(driver: webdriver.Chrome, login: str, password: str) -> bool:
     try:
+        logger.info(f"[{login}] Kirish boshlandi")
         driver.get(LOGIN_URL)
         wait = WebDriverWait(driver, WAIT_TIMEOUT)
+        logger.info(f"[{login}] Sahifa: {driver.current_url}")
 
-        # Login field — name="login"
-        login_field = wait.until(EC.presence_of_element_located((By.NAME, "login")))
-        login_field.clear()
-        login_field.send_keys(login)
-
-        # Captcha tekshiruvi — ko'p urinishdan keyin chiqadi
+        # Captcha tekshiruvi
         try:
             exceeded = driver.find_element(By.NAME, "exceededAttempts")
             if exceeded.get_attribute("value") == "true":
-                logger.warning(f"Captcha chiqdi, bu login o'tkazib yuborildi: {login}")
+                logger.warning(f"[{login}] Captcha — o'tkazib yuborildi")
                 return False
         except NoSuchElementException:
             pass
 
-        # Password field — name="password"
-        pwd_field = driver.find_element(By.NAME, "password")
+        # Login field
+        try:
+            login_field = wait.until(EC.presence_of_element_located((By.NAME, "login")))
+        except TimeoutException:
+            logger.error(f"[{login}] login field topilmadi! HTML: {driver.page_source[:300]}")
+            return False
+
+        login_field.clear()
+        login_field.send_keys(login)
+
+        # Password field
+        try:
+            pwd_field = driver.find_element(By.NAME, "password")
+        except NoSuchElementException:
+            logger.error(f"[{login}] password field topilmadi!")
+            return False
+
         pwd_field.clear()
         pwd_field.send_keys(password)
 
-        # Submit — input[name="submit"]
-        submit = driver.find_element(By.NAME, "submit")
+        # Submit tugmasi
+        try:
+            submit = driver.find_element(By.NAME, "submit")
+        except NoSuchElementException:
+            try:
+                submit = driver.find_element(By.CSS_SELECTOR, "button[type='submit'], input[type='submit']")
+            except NoSuchElementException:
+                logger.error(f"[{login}] submit topilmadi!")
+                return False
+
         submit.click()
+        logger.info(f"[{login}] Submit bosildi")
 
         # URL o'zgarishini kutamiz
         try:
             wait.until(EC.url_changes(LOGIN_URL))
         except TimeoutException:
-            # URL o'zgarmagan — login xato (noto'g'ri parol)
-            logger.warning(f"Login xato (URL o'zgarmadi): {login}")
+            # Xato xabarini log ga yozamiz
+            try:
+                err_els = driver.find_elements(By.CSS_SELECTOR, ".error, .alert, [class*='error'], [class*='invalid']")
+                for el in err_els:
+                    if el.text.strip():
+                        logger.warning(f"[{login}] Xato xabari: {el.text.strip()}")
+            except Exception:
+                pass
+            logger.warning(f"[{login}] URL o'zgarmadi — login/parol xato. URL: {driver.current_url}")
             return False
 
         time.sleep(ACTIVE_WAIT)
+        final_url = driver.current_url
+        logger.info(f"[{login}] Final URL: {final_url}")
 
-        # Login muvaffaqiyatli bo'lganini tekshir
-        if not _is_logged_in(driver):
-            logger.warning(f"Login xato (hali login sahifasida): {login}")
+        # Hali login.emaktab.uz da bo'lsa — xato
+        if "login.emaktab.uz" in final_url:
+            logger.warning(f"[{login}] Login xato — hali login sahifasida")
             return False
 
-        logger.info(f"Login OK: {login}")
-
-        # Logout — sessionni tozalash
+        logger.info(f"[{login}] Login OK!")
         _do_logout(driver)
         return True
 
     except TimeoutException:
-        logger.warning(f"Timeout: {login}")
+        logger.warning(f"[{login}] Timeout")
         return False
     except WebDriverException as e:
-        logger.error(f"WebDriver xato ({login}): {e}")
+        logger.error(f"[{login}] WebDriver xato: {e}")
         return False
     except Exception as e:
-        logger.error(f"Kutilmagan xato ({login}): {e}")
+        logger.error(f"[{login}] Xato: {e}")
         return False
 
 
