@@ -18,6 +18,11 @@ ACTIVE_WAIT  = 3
 
 def _make_driver() -> webdriver.Chrome:
     options = Options()
+    # Odamdek ko'rinish uchun:
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    options.add_argument("--headless=new")
+    options.add_argument("--no-sandbox")
+    options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
@@ -49,6 +54,13 @@ def _do_logout(driver: webdriver.Chrome):
 
 
 def _login_and_wait(driver: webdriver.Chrome, login: str, password: str) -> bool:
+    try:
+            login_field = wait.until(EC.presence_of_element_located((By.NAME, "login")))
+    except TimeoutException:
+            logger.error(f"[{login}] login field topilmadi! URL: {driver.current_url}")
+            # Bot ekranda nima ko'rayotganini rasmga saqlaymiz:
+            driver.save_screenshot(f"error_{login}.png")
+            return False
     try:
         logger.info(f"[{login}] Kirish boshlandi")
         driver.get(LOGIN_URL)
