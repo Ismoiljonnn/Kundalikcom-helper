@@ -18,11 +18,6 @@ ACTIVE_WAIT  = 3
 
 def _make_driver() -> webdriver.Chrome:
     options = Options()
-    # Odamdek ko'rinish uchun:
-    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-    options.add_argument("--headless=new")
-    options.add_argument("--no-sandbox")
-    options = Options()
     options.add_argument("--headless=new")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
@@ -32,11 +27,10 @@ def _make_driver() -> webdriver.Chrome:
     options.add_argument("--disable-extensions")
     options.add_argument("--disable-setuid-sandbox")
     options.add_argument("--remote-debugging-port=0")
+    options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
 
-    # Service ko'rsatilmasa Selenium 4.6+ o'zining selenium-manager ni ishlatadi.
-    # webdriver-manager ishlatilmaydi — "Exec format error" bug'i yo'q.
     driver = webdriver.Chrome(options=options)
     driver.set_page_load_timeout(30)
     driver.execute_script(
@@ -54,44 +48,20 @@ def _do_logout(driver: webdriver.Chrome):
 
 
 def _login_and_wait(driver: webdriver.Chrome, login: str, password: str) -> bool:
-    try:
-            login_field = wait.until(EC.presence_of_element_located((By.NAME, "login")))
-    except TimeoutException:
-            logger.error(f"[{login}] login field topilmadi! URL: {driver.current_url}")
-            # Bot ekranda nima ko'rayotganini rasmga saqlaymiz:
-            driver.save_screenshot(f"error_{login}.png")
-            return False
+    wait = WebDriverWait(driver, WAIT_TIMEOUT)
+
     try:
         logger.info(f"[{login}] Kirish boshlandi")
         driver.get(LOGIN_URL)
-        wait = WebDriverWait(driver, WAIT_TIMEOUT)
 
-        # Captcha tekshiruvi
-        try:
-            exceeded = driver.find_element(By.NAME, "exceededAttempts")
-            if exceeded.get_attribute("value") == "true":
-                logger.warning(f"[{login}] Captcha — o'tkazib yuborildi")
-                return False
-        except NoSuchElementException:
-            pass
+        # Wait for login field
+        login_field = wait.until(EC.presence_of_element_located((By.NAME, "login")))
 
-        # Login field
-        try:
-            login_field = wait.until(EC.presence_of_element_located((By.NAME, "login")))
-        except TimeoutException:
-            logger.error(f"[{login}] login field topilmadi! URL: {driver.current_url}")
-            return False
-
+        # Fill credentials
         login_field.clear()
         login_field.send_keys(login)
 
-        # Password field
-        try:
-            pwd_field = driver.find_element(By.NAME, "password")
-        except NoSuchElementException:
-            logger.error(f"[{login}] password field topilmadi!")
-            return False
-
+        pwd_field = driver.find_element(By.NAME, "password")
         pwd_field.clear()
         pwd_field.send_keys(password)
 
@@ -99,45 +69,40 @@ def _login_and_wait(driver: webdriver.Chrome, login: str, password: str) -> bool
         try:
             submit = driver.find_element(By.NAME, "submit")
         except NoSuchElementException:
-            try:
-                submit = driver.find_element(
-                    By.CSS_SELECTOR, "button[type='submit'], input[type='submit']"
-                )
-            except NoSuchElementException:
-                logger.error(f"[{login}] submit topilmadi!")
-                return False
-
+            submit = driver.find_element(
+                By.CSS_SELECTOR, "button[type='submit'], input[type='submit']"
+            )
         submit.click()
 
-        # URL o'zgarishini kutamiz
+        # Wait for URL change
         try:
             wait.until(EC.url_changes(LOGIN_URL))
         except TimeoutException:
-            try:
-                errs = driver.find_elements(
-                    By.CSS_SELECTOR, ".error,.alert,[class*='error'],[class*='invalid']"
-                )
-                for el in errs:
-                    if el.text.strip():
-                        logger.warning(f"[{login}] Xato xabari: {el.text.strip()}")
-            except Exception:
-                pass
-            logger.warning(f"[{login}] URL o'zgarmadi. Hozirgi URL: {driver.current_url}")
+            # Check for error messages
+            errs = driver.find_elements(
+                By.CSS_SELECTOR, ".error,.alert,[class*='error'],[class*='invalid']"
+            )
+            for el in errs:
+                if el.text.strip():
+                    logger.warning(f"[{login}] Xato: {el.text.strip()}")
+            logger.warning(f"[{login}] URL o'zgarmadi. URL: {driver.current_url}")
             return False
 
         time.sleep(ACTIVE_WAIT)
         final_url = driver.current_url
 
-        if "login.emaktab.uz" in final_url:
-            logger.warning(f"[{login}] Login xato — hali login sahifasida")
+        # Check if still on login page (failed login)
+        if "login" in final_url.lower():
+            logger.warning(f"[{login}] Login sahifasida qoldi")
             return False
 
-        logger.info(f"[{login}] Online qilindi ✓")
+        logger.info(f"[{login}] Online qilindi")
         _do_logout(driver)
         return True
 
     except TimeoutException:
         logger.warning(f"[{login}] Timeout")
+        driver.save_screenshot(f"error_{login}.png")
         return False
     except WebDriverException as e:
         logger.error(f"[{login}] WebDriver xato: {e}")
